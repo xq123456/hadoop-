@@ -1,0 +1,134 @@
+部署hadoop需要静态ip，所以要给自己的虚拟机加一张仅主机连接的网卡（host-only），然后改ip，根据自己情况规划ip，
+如：
+192.168.5.3 master
+192.168.5.4 slave1
+192.168.5.5 slave2
+修改后看各虚拟机之间是否可以ping通，
+并且根据这个修改/etc/hosts文件。
+确保自己的虚拟机装了jdk，jdk如何装这里就不赘述了。
+修改 /etc/security/limits.conf 最后加 配置最大线程和文件打开数
+* - nproc 65535
+* - nofile 65535
+确保创建了 hadoop 这个用户 执行以下命令
+su - hadoop
+mkdir ~/.ssh
+cd ~/.ssh
+ssh-keygen -t rsa -P ''
+
+cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+
+chmod 600 authorized_keys
+
+root 用户编辑 /etc/ssh/sshd_config
+vi /etc/ssh/sshd_config
+
+去掉 47 48 49 行的注释 (对应下面这三行)
+
+RSAAuthentication yes
+PubkeyAuthentication yes
+AuthorizedKeysFile      .ssh/authorized_keys
+配置.ssh权限防止没权限读取ssh的秘钥
+chown -R hadoop:hadoop /home/hadoop
+chmod 700 /home/hadoop
+chmod 700 /home/hadoop/.ssh
+chmod 644 /home/hadoop/.ssh/authorized_keys
+chmod 600 /home/hadoop/.ssh/id_rsa
+这样各虚拟机之间ssh通信就不需要密码了，这是部署hadoop之前的关键。
+hadoop 1.0.4 传到 虚拟机
+放到 /home/hadoop 目录下
+解压
+tar -vxzf hadoop-1.0.4.tar.gz
+修改解压后的目录名(mv 是移动文件 相当于改名)
+mv hadoop-1.0.4 hadoop
+mkdir ~/hadoop/data/
+mkdir ~/hadoop/tmp/
+chmod 755 ~/hadoop/data/
+chmod 755 ~/hadoop/tmp/
+在root权限下修改/etc/profile文件，在文件末尾加上
+export HADOOP_HOME=/home/hadoop/hadoop
+export PATH=$PATH:$HADOOP_HOME/bin
+统一修改hadoop用户conf目录(~/hadoop/conf)下的各种配置文件
+
+修改配置文件hadoop-env.sh
+搜索到JAVA_HOME所在行，然后将默认的“#”去掉，也就是打开注释，然后如下配置：
+export JAVA_HOME=/usr/java/jdk1.6.0_45
+
+修改配置文件 core-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!-- Put site-specific property overrides in this file. -->
+<configuration>
+ <property>
+      <name>fs.default.name</name>
+      <value>hdfs://master:9000</value>
+ </property>
+</configuration>
+
+修改配置文件 hdfs-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!-- Put site-specific property overrides in this file. -->
+<configuration>
+ <property>  
+  <name>dfs.replication</name>
+  <value>3</value>
+ </property>            
+ <property>  
+   <name>dfs.name.dir</name>  
+   <value>/home/hadoop/hadoop/namenode/</value>  
+  </property> 
+  <property>  
+   <name>dfs.data.dir</name>  
+   <value>/home/hadoop/hadoop/data/</value>  
+  </property>               
+  <property>  
+    <name>hadoop.tmp.dir</name>  
+    <value>/home/hadoop/hadoop/tmp/</value>  
+  </property>
+  <property>
+   <name>dfs.permissions</name>
+   <value>false</value>
+  </property>
+</configuration>
+
+修改配置文件 mapred-site.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<!-- Put site-specific property overrides in this file. -->
+<configuration>
+ <property>  
+   <name>mapred.job.tracker</name>  
+   <value>master:9001</value>  
+ </property>
+ <property>  
+   <name>mapred.tasktracker.map.tasks.maximum</name>  
+   <value>2</value>  
+ </property>                  
+ <property>  
+    <name>mapred.tasktracker.reduce.tasks.maximum</name>  
+    <value>2</value>  
+ </property>  
+</configuration>
+
+修改配置文件 masters
+配置如下：
+master
+
+修改配置文件 slaves
+配置如下：
+slave1
+slave2
+hadoop namenode -format
+启动hadoop：
+start-all.sh
+启动后使用jps命令查看：
+NN上：
+jps
+namenode 1002
+secondarynamenode 1011
+jobtracker 1012
+DN上：
+jps
+datanode 2
+tasktracker 10
+然后通过http://master:50070和http://master:50030查看监控界面。
